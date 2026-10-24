@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wander — Spellcasting Duel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-mode="menu">
+  <canvas id="stage"></canvas>
+  <video id="cam" playsinline muted></video>
+
+  <!-- In-game HUD -->
+  <div id="hud" class="hidden">
+    <button id="leave" data-action="menu" title="Back to menu (Esc)">✕ Leave</button>
+
+    <div id="enemy-bar">
+      <div class="name"><span id="enemy-name"></span> <span id="enemy-phase"></span></div>
+      <div class="bar"><div class="fill" id="enemy-hp"></div><div class="ward" id="enemy-ward"></div></div>
+      <div id="enemy-status" class="status-row"></div>
+      <div id="enemy-cast" class="castbar hidden"><div class="fill"></div><span class="label"></span></div>
+    </div>
+
+    <div id="book" class="panel">
+      <button id="book-toggle" title="Toggle spellbook (B)">Spellbook</button>
+      <ul id="book-list"></ul>
+    </div>
+
+    <div id="mind" class="panel">
+      <h3 id="mind-title">The Archon's Mind</h3>
+      <div id="mind-style"></div>
+      <div id="mind-predict"></div>
+      <div id="mind-options"></div>
+      <ol id="mind-log"></ol>
+    </div>
+
+    <div id="player-panel" class="panel">
+      <div class="row"><span class="lbl">Vitality</span><b id="player-hp-text">100</b></div>
+      <div class="bar hp"><div class="fill" id="player-hp"></div></div>
+      <div class="row"><span class="lbl">Mana</span><b id="player-mana-text">100</b></div>
+      <div class="bar mana"><div class="fill" id="player-mana"></div></div>
+      <div id="player-status" class="status-row"></div>
+    </div>
+
+    <div id="combo-hint"></div>
+    <div id="voice-wrap"><span id="mic" data-state="off"></span><span id="voice-live"></span></div>
+    <div id="voice-ticker"></div>
+    <div id="intro"></div>
+  </div>
+
+  <div id="banner"><div class="title"></div><div class="sub"></div></div>
+
+  <div id="cam-pip"><canvas id="pip" width="200" height="150"></canvas><div id="pose-label"></div><div id="cam-status"></div></div>
+
+  <!-- Menu -->
+  <div id="menu" class="screen">
+    <div class="menu-inner">
+      <header>
+        <p class="eyebrow">A duel of gesture &amp; word</p>
+        <h1>WANDER</h1>
+        <p class="tag">Your hand is the wand. Your voice is the word.</p>
+      </header>
+
+      <div class="menu-buttons">
+        <button data-action="duel" class="primary">⚔ Duel the Archon</button>
+        <button data-action="practice">✦ Practice Grounds</button>
+        <button data-action="forge">✎ Spell Forge</button>
+      </div>
+
+      <form id="settings" onsubmit="return false">
+        <label><input type="checkbox" id="opt-cam"> Webcam wand</label>
+        <label><input type="checkbox" id="opt-voice"> Voice incantations</label>
+        <label><input type="checkbox" id="opt-ar"> AR backdrop</label>
+        <label>Draw with
+          <select id="opt-trigger"><option value="point">Pointing finger</option><option value="pinch">Pinch</option></select>
+        </label>
+        <label>Foe
+          <select id="opt-diff"><option value="0">Apprentice</option><option value="1">Adept</option><option value="2">Archmage</option></select>
+        </label>
+      </form>
+      <p id="memory-note"></p>
+
+      <section class="how">
+        <div><b>1 · Point</b><span>Raise one finger (or pinch) — the tip becomes your wand.</span></div>
+        <div><b>2 · Draw</b><span>Trace a form in the air. Relax your hand or hold still to release.</span></div>
+        <div><b>3 · Speak</b><span>Say the incantation as you draw for an <em>empowered</em> cast.</span></div>
+        <div><b>4 · Fuse</b><span>Chain two spells within 4s to trigger a fusion.</span></div>
+      </section>
+
+      <h2>Spellbook</h2>
+      <div id="spellbook-grid"></div>
+      <h2>Spell Fusions</h2>
+      <div id="combo-grid"></div>
+      <p class="hint">No camera? Draw with the mouse. Keys <kbd>1</kbd>–<kbd>7</kbd> cast directly (<kbd>Shift</kbd> = empowered). <kbd>Esc</kbd> leaves a duel.</p>
+    </div>
+  </div>
+
+  <!-- Spell Forge -->
+  <div id="forge" class="screen side hidden">
+    <h2>Spell Forge</h2>
+    <p>Invent a new wand form. Draw it <b>3–5 times</b> on the left, then bind it to an effect and an incantation.</p>
+    <label>Spell name <input id="forge-name" maxlength="24" placeholder="Moonveil"></label>
+    <label>Incantation <input id="forge-incant" maxlength="24" placeholder="Nocturna (optional)"></label>
+    <label>Effect <select id="forge-base"></select></label>
+    <div class="lbl">Color</div>
+    <div id="forge-colors"></div>
+    <div class="lbl">Samples <span id="forge-count">0/3</span></div>
+    <div id="forge-samples"></div>
+    <p id="forge-msg"></p>
+    <div class="row">
+      <button id="forge-clear">Clear samples</button>
+      <button id="forge-save" class="primary">Bind spell</button>
+    </div>
+    <h3>Your grimoire</h3>
+    <ul id="forge-list"></ul>
+    <button id="forge-back">← Back to menu</button>
+  </div>
+
+  <!-- Game over -->
+  <div id="over" class="screen hidden">
+    <div class="over-inner">
+      <h1 id="over-title"></h1>
+      <p id="over-sub"></p>
+      <div id="over-stats"></div>
+      <p id="over-learned"></p>
+      <div class="menu-buttons">
+        <button data-action="rematch" class="primary">⚔ Rematch</button>
+        <button data-action="practice">✦ Practice</button>
+        <button data-action="menu">Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
