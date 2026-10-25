@@ -269,7 +269,7 @@ void setup() {
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);
   SPI.begin(TFT_SCLK, -1, TFT_MOSI, TFT_CS);
-  tft.init(170, 320);
+  tft.init(170, 320);  // if the screen stays black or garbled, try tft.init(170, 320, SPI_MODE3)
   tft.setSPISpeed(40000000);
   tft.setRotation(ROTATION);
   canvas = new GFXcanvas16(W, H);
