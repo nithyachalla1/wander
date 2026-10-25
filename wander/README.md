@@ -24,18 +24,13 @@ python main.py --no-camera     # mouse-only casting
 python main.py --no-voice      # skip the microphone
 python main.py --camera 1      # pick a different webcam
 python main.py --fullscreen    # or press F11 in-game
-python main.py --input ir      # track the hardware wand's IR beacon instead of your hand
-python main.py --wand-port COM5  # if the wand isn't auto-detected
 ```
 
 ### Hardware wand
-Flash `../wand/wand.ino` to the Nano (needs the U8g2 library). The webcam follows the IR LED at the wand's tip,
-and the button on the wand arms it: strokes only count while the OLED says **ARMED**. The OLED shows your current
-spell's shape and name, your health, and reactions ("Good attack!", "OUCH!"). Switch between hand and wand with
-the **Wand:** button in the menu. No wand plugged in? Press `Space` to arm/disarm.
-
-Many laptop webcams filter out IR. Point a phone camera at the sensor: if you can't see the LED glow, swap in a
-bright white LED at the tip. The tracker just looks for the brightest small dot, so it works the same.
+An ideaspark ESP32 board (built-in 1.9" 170x320 LCD) plus one LED at the tip, running `../wand/wand.ino`. It needs
+the *Adafruit ST7735 and ST7789* and *Adafruit GFX* libraries. When the wand option is picked in the game, the LED
+lights up for the webcam to follow and the screen shows your health, the current spell's shape and name in its
+color, and reactions ("Good attack!", "OUCH!"). Wire GPIO25 -> resistor -> LED -> GND (values are in the sketch).
 
 ## How to cast
 | Spell | Form | Incantation | Effect |
