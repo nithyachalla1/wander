@@ -1,3 +1,5 @@
+# Environment file for the wander project
+
 name: wander
 channels:
   - conda-forge
