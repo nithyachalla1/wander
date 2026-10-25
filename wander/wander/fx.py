@@ -11,6 +11,23 @@ from .spells import rgb
 
 ADD = pygame.BLEND_ADD
 _glow_cache = {}
+_masters = {}
+MASTER_R = 128
+TRIM = 0.82  # the falloff is ~invisible past 0.8r, so those pixels are trimmed
+
+
+def _master(color):
+    """One full-brightness glow per color, rendered once with numpy."""
+    m = _masters.get(color)
+    if m is None:
+        half = int(MASTER_R * TRIM) + 1
+        y, x = np.mgrid[0:2 * half, 0:2 * half]
+        dist = np.sqrt((x - half + 0.5) ** 2 + (y - half + 0.5) ** 2) / MASTER_R
+        inten = np.clip(1 - dist, 0, 1) ** 2
+        core = np.clip(1 - dist / 0.22, 0, 1) ** 2
+        arr = inten[..., None] * np.array(color, float) + core[..., None] * 200.0
+        m = _masters[color] = pygame.surfarray.make_surface(np.clip(arr, 0, 255).astype(np.uint8).transpose(1, 0, 2))
+    return m
 
 
 def glow(color, r, level=8):
@@ -18,20 +35,22 @@ def glow(color, r, level=8):
     stands in for alpha because additive blits have none."""
     if isinstance(color, str):
         color = rgb(color)
-    r = max(2, int(r) if r < 12 else int(r) // 4 * 4)  # bucket sizes so the cache stays small
-    level = max(1, min(8, int(level)))
+    # Bucket radius (~12% geometric steps) and brightness (4 steps) so a warm
+    # cache serves nearly every particle.
+    r = max(2, int(r) if r < 8 else int(8 * 1.12 ** round(math.log(r / 8, 1.12))))
+    level = max(2, min(8, int(level + 1) // 2 * 2))
     key = (color, r, level)
     s = _glow_cache.get(key)
     if s is None:
-        if len(_glow_cache) > 3000:
+        if len(_glow_cache) > 20000:
             _glow_cache.clear()
-        d = 2 * r
-        y, x = np.mgrid[0:d, 0:d]
-        dist = np.sqrt((x - r + 0.5) ** 2 + (y - r + 0.5) ** 2) / r
-        inten = np.clip(1 - dist, 0, 1) ** 2
-        core = np.clip(1 - dist / 0.22, 0, 1) ** 2
-        arr = (inten[..., None] * np.array(color, float) + core[..., None] * 200.0) * (level / 8)
-        s = pygame.surfarray.make_surface(np.clip(arr, 0, 255).astype(np.uint8).transpose(1, 0, 2))
+        d = 2 * (int(r * TRIM) + 1)
+        s = pygame.transform.smoothscale(_master(color), (d, d))
+        if level < 8:
+            k = int(255 * level / 8)
+            s.fill((k, k, k), special_flags=pygame.BLEND_MULT)
+        if pygame.display.get_surface():
+            s = s.convert()
         _glow_cache[key] = s
     return s
 
@@ -64,11 +83,12 @@ def lightning_points(x1, y1, x2, y2, depth=6, rough=0.22):
 
 
 class FX:
-    MAX_PARTS = 1100
+    MAX_PARTS = 800
 
     def __init__(self):
         self.parts, self.rings, self.bolts, self.texts, self.flashes = [], [], [], [], []
         self.shake = 0.0
+        self.scale = 1.0  # screen px per design px; sizes and speeds below are in design px
 
     def clear(self):
         self.parts.clear()
@@ -80,7 +100,8 @@ class FX:
     def spawn(self, x, y, vx=0.0, vy=0.0, life=1.0, size=10.0, color='#ffffff', drag=2.0, grav=0.0, grow=0.0):
         if len(self.parts) >= self.MAX_PARTS:
             self.parts.pop(0)
-        self.parts.append([x, y, vx, vy, life, life, size, color, drag, grav, grow])
+        k = self.scale
+        self.parts.append([x, y, vx * k, vy * k, life, life, size * k, color, drag, grav * k, grow * k])
 
     def burst(self, x, y, color, n=30, speed=300, life=0.7, size=10, drag=2.5, grav=0.0, grow=0.0):
         colors = color if isinstance(color, (list, tuple)) and isinstance(color[0], str) else [color]
@@ -115,7 +136,7 @@ class FX:
             p[1] += p[3] * dt
             p[6] += p[10] * dt
             p[4] -= dt
-            if p[4] > 0 and p[6] > 0.5:
+            if p[4] > 0 and p[6] > 0.5 * self.scale:
                 alive.append(p)
         self.parts = alive
         for group, idx_dur in ((self.rings, 5), (self.bolts, 5), (self.texts, 5), (self.flashes, 2)):
@@ -136,9 +157,10 @@ class FX:
             e = 1 - (1 - k) ** 3
             rad = int(r0 + (r1 - r0) * e)
             if rad > 1:
-                pygame.draw.circle(layer, dim(color, 1 - k), (int(x), int(y)), rad, max(1, int(width * (1 - k * 0.6))))
+                pygame.draw.circle(layer, dim(color, 1 - k), (int(x), int(y)), rad, max(1, int(width * self.scale * (1 - k * 0.6))))
         for x1, y1, x2, y2, color, dur, width, t in self.bolts:
             a = 1 - t / dur
+            width *= self.scale
             pts = lightning_points(x1, y1, x2, y2)
             pygame.draw.lines(layer, dim(color, 0.3 * a), False, pts, max(1, int(width * 5)))
             pygame.draw.lines(layer, dim(color, 0.85 * a), False, pts, max(1, int(width * 2)))
@@ -155,7 +177,7 @@ class FX:
         for x, y, s, color, size, dur, t in self.texts:
             k = t / dur
             alpha = 1.0 if k < 0.7 else (1 - k) / 0.3
-            render_text(surf, s, (x, y - k * 50), size=int(size), color=color, serif=True, anchor='center',
+            render_text(surf, s, (x, y - k * 50 * self.scale), size=int(size), color=color, serif=True, anchor='center',
                         alpha=alpha, outline=True)
 
     def draw_flashes(self, surf, overlay):
