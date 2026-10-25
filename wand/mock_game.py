@@ -86,6 +86,16 @@ def reader(ser, booted, stop):
                 print(f'   <- {line}')
 
 
+def keepalive(ser, state, stop):
+    """Repeats the last A: line every second, like the game does, so the wand doesn't time out
+    (it switches off after 5s of silence) while --step waits for Enter."""
+    while not stop.wait(1.0):
+        try:
+            ser.write((state['A'] + '\n').encode('ascii'))
+        except serial.SerialException:
+            return
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--port', help='serial port, e.g. COM5 (default: auto-detect)')
@@ -102,12 +112,15 @@ def main():
         sys.exit('Pass --port COMx')
 
     ser = serial.Serial(dev, 115200, timeout=0.05)
-    print(f'Opened {dev}. Waiting for the wand to boot (opening the port resets it)...')
+    print(f'Opened {dev}. Waiting for the wand to boot...')
     booted, stop = threading.Event(), threading.Event()
     threading.Thread(target=reader, args=(ser, booted, stop), daemon=True).start()
     if not booted.wait(4):
-        print('   (no "W" boot line seen; carrying on anyway)')
+        # Normal through the Nano bridge: opening the port doesn't reset the ESP32
+        print('   (no "W" boot line; wand was already running)')
     time.sleep(0.3)
+    state = {'A': 'A:0'}
+    threading.Thread(target=keepalive, args=(ser, state, stop), daemon=True).start()
 
     try:
         while True:
@@ -117,6 +130,8 @@ def main():
                 print(f'\n[{i:2}/{len(SCRIPT)}] {expect}')
                 if line:
                     print(f'   -> {line}')
+                    if line.startswith('A:'):
+                        state['A'] = line
                     ser.write((line + '\n').encode('ascii'))
                 if args.step:
                     input('   (Enter for next) ')
@@ -129,12 +144,12 @@ def main():
         print()
     finally:
         # Leave the wand dark so it doesn't keep lighting up after the test.
+        stop.set()
         try:
             ser.write(b'A:0\n')
             ser.flush()
         except serial.SerialException:
             pass
-        stop.set()
         ser.close()
         print('Done (sent A:0, LED off).')
 

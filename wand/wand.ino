@@ -10,9 +10,19 @@
 // Wiring: GPIO25 -> resistor -> LED long leg (+), short leg -> GND.
 //         Red/green LED: 100 ohm. White/blue LED: 33 ohm (they need almost all of the 3.3V).
 //
+// USB through a Nano (this board's own USB-serial chip is dead): the Nano's RST is tied to GND so only
+// its USB chip runs, and it bridges straight to UART0:
+//   Nano D1 (TX) -> ESP32 TX0 (GPIO1)
+//   Nano D0 (RX) -> 1k -> ESP32 RX0 (GPIO3), with 2k from RX0 to GND (5V -> 3.3V divider)
+//   Nano 5V -> ESP32 5V/VIN, GND -> GND. Leave the ESP32's own USB unplugged.
+// To upload: hold BOOT, tap EN, release BOOT, then upload to the Nano's COM port.
+// Opening the port no longer resets the ESP32, so the wand can't tell when the game starts or quits.
+// Instead the game re-sends its state when it connects and repeats "A:" every second as a keepalive;
+// if the wand hears nothing for LINK_TIMEOUT_MS it switches itself off.
+//
 // Serial protocol over USB (115200 baud, newline-terminated):
 //   wand -> PC: "W" on boot, then "B1" / "B0" (on / off) every second as a heartbeat
-//   PC -> wand: "A:1" / "A:0"       wand option selected / deselected: LED and screen on / off
+//   PC -> wand: "A:1" / "A:0"       wand option selected / deselected: LED and screen on / off (also the keepalive)
 //               "S:<shape>:<name>"  current spell (shape: circle bolt flick spiral up triangle vee star)
 //               "H:<0-100>"         player health
 //               "M:<text>"          message band ("Good attack!")
@@ -41,6 +51,7 @@
 
 const int W = 170, H = 320;
 const unsigned long MSG_MS = 1400, FLASH_MS = 700;
+const unsigned long LINK_TIMEOUT_MS = 5000;  // no word from the game for this long: game quit, switch off
 
 Adafruit_ST7789 tft(TFT_CS, TFT_DC, TFT_RST);
 GFXcanvas16 *canvas;
@@ -55,7 +66,7 @@ char msg[24] = "";
 char flash[16] = "";
 int hp = -1;
 bool active = false;
-unsigned long msgAt = 0, flashAt = 0, beatAt = 0;
+unsigned long msgAt = 0, flashAt = 0, beatAt = 0, heardAt = 0;
 bool dirty = true;
 
 char rx[48];
@@ -98,6 +109,7 @@ bool setField(char *dst, size_t n, const char *src) {
 
 void handleLine(char *line) {
   if (line[0] == 0 || line[1] != ':') return;
+  heardAt = millis();
   char *arg = line + 2;
   switch (line[0]) {
     case 'A': setActive(arg[0] == '1'); break;
@@ -287,6 +299,7 @@ void loop() {
 
   unsigned long t = millis();
   if (t - beatAt > 1000) heartbeat();
+  if (active && t - heardAt > LINK_TIMEOUT_MS) setActive(false);
 
   // Redraw once more when a message or flash expires
   static bool hadMsg = false, hadFlash = false;

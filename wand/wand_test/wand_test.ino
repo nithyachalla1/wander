@@ -48,6 +48,7 @@
 
 const int W = 170, H = 320;
 const unsigned long MSG_MS = 1400, FLASH_MS = 700;
+const unsigned long LINK_TIMEOUT_MS = 5000;  // no word from the game for this long: game quit, switch off
 
 Adafruit_ST7789 tft(TFT_CS, TFT_DC, TFT_RST);
 GFXcanvas16 *canvas;
@@ -62,7 +63,7 @@ char msg[24] = "";
 char flash[16] = "";
 int hp = -1;
 bool active = false;
-unsigned long msgAt = 0, flashAt = 0, beatAt = 0;
+unsigned long msgAt = 0, flashAt = 0, beatAt = 0, heardAt = 0;
 bool dirty = true;
 
 char rx[48];
@@ -105,6 +106,7 @@ bool setField(char *dst, size_t n, const char *src) {
 
 void handleLine(char *line) {
   if (line[0] == 0 || line[1] != ':') return;
+  heardAt = millis();
   char *arg = line + 2;
   switch (line[0]) {
     case 'A': setActive(arg[0] == '1'); break;
@@ -362,6 +364,7 @@ void loop() {
 
   unsigned long t = millis();
   if (t - beatAt > 1000) heartbeat();
+  if (active && t - heardAt > LINK_TIMEOUT_MS) setActive(false);
 
   // Redraw once more when a message or flash expires
   static bool hadMsg = false, hadFlash = false;

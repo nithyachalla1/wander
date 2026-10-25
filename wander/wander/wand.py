@@ -1,6 +1,10 @@
-"""Serial link to the Arduino wand (see wand/wand.ino): reads the arm button, and drives the
-wand's OLED with the current spell, health and little reactions. Runs on a background thread,
-reconnects if the USB cable is pulled, and does nothing if pyserial or the wand is missing."""
+"""Serial link to the ESP32 wand (see wand/wand.ino): turns its tip LED on and off, and drives its
+LCD with the current spell, health and little reactions. Runs on a background thread, reconnects if
+the USB cable is pulled, and does nothing if pyserial or the wand is missing.
+
+The wand is reached through a Nano used as a USB-serial bridge, so opening the port doesn't reset it.
+We re-send our state on every connect and repeat "A:" every second; if the wand stops hearing from us
+(game quit or crashed) it turns itself off."""
 
 import queue
 import random
@@ -9,6 +13,7 @@ import time
 
 # Arduino, CH340, FTDI and CP210x USB-serial chips, the usual suspects on Nano boards and clones.
 WAND_VIDS = {0x2341, 0x2A03, 0x1A86, 0x0403, 0x10C4}
+KEEPALIVE_SECS = 1.0  # well inside the wand's 5s LINK_TIMEOUT_MS
 
 CHEERS = ['Good attack!', 'Nice cast!', 'Clean form!', 'Keep it up!', 'Brilliant!', 'Again!']
 OUCHES = ['OUCH!', 'OOF!', 'ARGH!']
@@ -19,11 +24,12 @@ class WandLink:
     def __init__(self, port=None):
         self.port = port
         self.connected = False
-        self.armed = False
+        self.armed = False  # the wand reports its LED on (B1) / off (B0)
         self.status = 'Looking for wand...'
         self.error = None
+        self._active = False
         self._out = queue.Queue(maxsize=16)
-        self._sticky = {}  # last S:/H: lines, re-sent when the wand (re)boots
+        self._sticky = {}  # last S:/H: lines, re-sent when the wand connects or (re)boots
         self._msg_until = 0.0
         self._stop = False
         self._thread = None
@@ -35,6 +41,10 @@ class WandLink:
         self._thread.start()
 
     def stop(self):
+        """Switch the wand off on the way out, rather than leaving it to time out."""
+        if self.connected:
+            self.set_active(False)
+            time.sleep(0.1)
         self._stop = True
 
     # ------------------------------------------------------------ game -> wand
@@ -48,6 +58,21 @@ class WandLink:
         if self._sticky.get(key) != line:
             self._sticky[key] = line
             self._send(line)
+
+    def set_active(self, on):
+        """Wand option picked / dropped: tip LED and LCD on / off."""
+        self._active = bool(on)
+        self._send(self._active_line())
+
+    def _active_line(self):
+        return 'A:1' if self._active else 'A:0'
+
+    def _replay(self):
+        while not self._out.empty():  # drop anything queued while disconnected: stale OUCHes etc.
+            self._out.get_nowait()
+        self._send(self._active_line())
+        for v in self._sticky.values():
+            self._send(v)
 
     def show(self, shape, name):
         self._sticky_send('S', f'S:{shape}:{name[:19]}')
@@ -109,21 +134,25 @@ class WandLink:
     def _talk(self, ser):
         buf = b''
         last_rx = time.monotonic()
+        last_beat = 0.0
+        self._replay()  # the wand may have been running all along: bring it up to date
         while not self._stop:
             buf += ser.read(64)
             while b'\n' in buf:
                 line, buf = buf.split(b'\n', 1)
                 line = line.strip().decode('ascii', 'ignore')
                 last_rx = time.monotonic()
-                if line == 'W':  # wand just booted (opening the port resets a Nano): replay state
-                    for v in self._sticky.values():
-                        self._send(v)
+                if line == 'W':  # wand just booted (EN pressed, power blip): replay state
+                    self._replay()
                 elif line in ('B0', 'B1'):
                     self.connected = True
                     self.armed = line == 'B1'
             if time.monotonic() - last_rx > 3:
                 self.connected = False
-            # The Nano has a 64-byte receive buffer and stalls ~60ms per OLED frame, so pace writes.
+            if time.monotonic() - last_beat > KEEPALIVE_SECS:
+                last_beat = time.monotonic()
+                self._send(self._active_line())
+            # Each frame takes the ESP32 ~25ms to push to the LCD, so pace writes.
             try:
                 line = self._out.get_nowait()
             except queue.Empty:
