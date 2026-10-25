@@ -155,7 +155,7 @@ void drawGlyph(const char *s, int cx, int cy) {
     }
   } else {  // nothing cast yet
     oled.setFont(u8g2_font_helvB14_tr);
-    const char *t = "WANDER";
+    const char *t = "let's go!";
     oled.drawStr(cx - oled.getStrWidth(t) / 2, cy + 7, t);
   }
 }
