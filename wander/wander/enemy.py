@@ -286,7 +286,7 @@ def _alpha_poly(surf, pts, color, alpha):
     surf.blit(tmp, (x0, y0))
 
 
-def draw_archon(surf, layer, e, x, y, s):
+def draw_archon(surf, layer, e, x, y, s, u=1.0, eye=None):
     t = e.t
     y += math.sin(t * 1.6) * 0.03 * s
     sx = sy = s
@@ -300,18 +300,19 @@ def draw_archon(surf, layer, e, x, y, s):
     def P(ux, uy):
         return (x + ux * sx, y + uy * sy)
 
-    eye = ['#c070ff', '#c070ff', '#ff3b8a', '#ff2a2a'][e.phase]
+    eye = eye or ['#c070ff', '#c070ff', '#ff3b8a', '#ff2a2a'][e.phase]
+    lw, lw1 = max(1, round(2 * u)), max(1, round(u))
     blit_glow(surf, eye, x, y, 0.9 * s, 2 + 1 * math.sin(t * 3))
 
     robe = [P(*p) for p in _robe(t)]
     pygame.draw.polygon(surf, (20, 12, 38), robe)
-    pygame.draw.polygon(layer, dim(eye, 0.35), robe, 2)
+    pygame.draw.polygon(layer, dim(eye, 0.35), robe, lw)
 
     # rune trim
-    pygame.draw.line(layer, dim(eye, 0.45), P(0, -0.18), P(0, 0.6), 2)
+    pygame.draw.line(layer, dim(eye, 0.45), P(0, -0.18), P(0, 0.6), lw)
     for i in range(4):
         yy = -0.05 + i * 0.16
-        pygame.draw.lines(layer, dim(eye, 0.45), False, [P(-0.03, yy), P(0, yy + 0.04), P(0.03, yy)], 2)
+        pygame.draw.lines(layer, dim(eye, 0.45), False, [P(-0.03, yy), P(0, yy + 0.04), P(0.03, yy)], lw)
 
     # face void + eyes
     fw, fh = 0.23 * sx, 0.28 * sy
@@ -349,12 +350,12 @@ def draw_archon(surf, layer, e, x, y, s):
             return P(math.cos(a + rot) * rr, 0.08 + math.sin(a + rot) * rr * 0.45)
 
         pts = [ring_pt(i / 40 * math.tau, R) for i in range(41)]
-        pygame.draw.lines(layer, dim(col, 0.4 + 0.6 * k), False, pts, 2)
+        pygame.draw.lines(layer, dim(col, 0.4 + 0.6 * k), False, pts, lw)
         arcn = max(2, int(40 * k))
-        pygame.draw.lines(layer, dim(col, 0.4 + 0.6 * k), False, [ring_pt(i / 40 * math.tau, R * 0.75) for i in range(arcn + 1)], 2)
+        pygame.draw.lines(layer, dim(col, 0.4 + 0.6 * k), False, [ring_pt(i / 40 * math.tau, R * 0.75) for i in range(arcn + 1)], lw)
         for i in range(6):
             a = i / 6 * math.tau
-            pygame.draw.line(layer, dim(col, 0.5 + 0.5 * k), ring_pt(a, R), ring_pt(a + 2.1, R), 1)
+            pygame.draw.line(layer, dim(col, 0.5 + 0.5 * k), ring_pt(a, R), ring_pt(a + 2.1, R), lw1)
 
     # status overlays
     if e.frozen > 0 or e.stasis > 0:
@@ -363,14 +364,14 @@ def draw_archon(surf, layer, e, x, y, s):
         for i in range(n):
             a = i / n * math.tau
             cx, cy = math.cos(a) * 0.42, 0.05 + math.sin(a) * 0.55
-            pygame.draw.polygon(layer, (150, 200, 220), [P(cx, cy - 0.08), P(cx + 0.035, cy), P(cx, cy + 0.08), P(cx - 0.035, cy)], 1)
+            pygame.draw.polygon(layer, (150, 200, 220), [P(cx, cy - 0.08), P(cx + 0.035, cy), P(cx, cy + 0.08), P(cx - 0.035, cy)], lw1)
         if e.stasis > 0:
-            pygame.draw.rect(layer, (110, 160, 170), pygame.Rect(*P(-0.55, -0.75), 1.1 * sx, 1.5 * sy), 2)
+            pygame.draw.rect(layer, (110, 160, 170), pygame.Rect(*P(-0.55, -0.75), 1.1 * sx, 1.5 * sy), lw)
     if e.flash > 0:
         _alpha_poly(surf, robe, '#ffffff', e.flash * 0.8)
 
 
-def draw_effigy(surf, e, x, y, s):
+def draw_effigy(surf, e, x, y, s, u=1.0):
     def P(ux, uy):
         return (x + ux * s, y + uy * s)
 
@@ -382,7 +383,7 @@ def draw_effigy(surf, e, x, y, s):
     pygame.draw.ellipse(surf, (138, 112, 72), R(-0.22, -0.22, 0.44, 0.64))
     pygame.draw.circle(surf, (138, 112, 72), P(0, -0.38), 0.13 * s)
     for i in range(6):
-        pygame.draw.line(surf, (90, 68, 40), P(-0.2, -0.1 + i * 0.07), P(0.2, -0.08 + i * 0.07), 2)
+        pygame.draw.line(surf, (90, 68, 40), P(-0.2, -0.1 + i * 0.07), P(0.2, -0.08 + i * 0.07), max(1, round(2 * u)))
     for r, c in ((0.16, (194, 59, 59)), (0.11, (239, 226, 196)), (0.06, (194, 59, 59))):
         pygame.draw.circle(surf, c, P(0, 0.08), r * s)
     pygame.draw.rect(surf, (42, 26, 12), R(-0.06, -0.42, 0.03, 0.03))

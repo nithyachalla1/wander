@@ -164,6 +164,14 @@ void centered(const char *s, int y) {
   oled.drawStr((128 - oled.getStrWidth(s)) / 2, y, s);
 }
 
+// Names from the game can be up to 19 chars (forged spells), wider than 128px in helvB10:
+// fall back to the small font rather than running off the screen.
+void centeredFit(const char *s, int y) {
+  oled.setFont(u8g2_font_helvB10_tr);
+  if (oled.getStrWidth(s) > 124) oled.setFont(u8g2_font_6x10_tr);
+  centered(s, y);
+}
+
 void drawFrame() {
   unsigned long t = millis();
   bool showFlash = flash[0] && t - flashAt < FLASH_MS;
@@ -196,14 +204,12 @@ void drawFrame() {
 
   drawGlyph(shape, 64, 50);
 
-  oled.setFont(u8g2_font_helvB10_tr);
-  centered(spell[0] ? spell : "Draw a spell", 98);
+  centeredFit(spell[0] ? spell : "Draw a spell", 98);
 
   if (showMsg) {
     oled.drawBox(0, 106, 128, 22);
     oled.setDrawColor(0);
-    oled.setFont(u8g2_font_helvB10_tr);
-    centered(msg, 122);
+    centeredFit(msg, 122);
     oled.setDrawColor(1);
   }
 }
