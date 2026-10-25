@@ -5,3 +5,5 @@ mediapipe>=0.10.14
 SpeechRecognition>=3.10
 pyaudio>=0.2.13
 pyserial>=3.5
+websockets>=13
+anthropic>=2.0

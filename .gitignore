@@ -1,0 +1,8 @@
+# Python caches
+__pycache__/
+*.pyc
+
+# API keys belong in %USERPROFILE%\.wander\, never in the repo
+*_key.txt
+*.key
+.env
