@@ -26,6 +26,36 @@ python main.py --camera 1      # pick a different webcam
 python main.py --fullscreen    # or press F11 in-game
 ```
 
+The game renders at your screen's native resolution (it opts out of Windows display-scaling blur) and
+scales its UI to match. Resize the window freely, or press **F11** for crisp fullscreen.
+
+## Arena: multiplayer with Gemini bots
+
+Menu -> **Arena (Multiplayer)**. A free-for-all for up to 4 wizards; bots fill the empty seats.
+
+- **Host:** type your name, click **Host game**. The lobby shows the address friends should use (e.g. `10.0.0.12:8765`).
+  Pick how many bots and their skill, then **Start match**.
+- **Join:** type the host's address in *Server address*, click **Join**. (Same Wi-Fi; allow Python through
+  the Windows firewall the first time.)
+- **Dedicated server:** `python server.py` hosts without playing.
+- **In the match:** cast exactly like the duel (gestures, voice, keys 1-7). Click a wizard or press **Tab** to
+  choose your target. The server is authoritative: damage, wards, fusions and statuses are resolved there.
+
+### Gemini-powered bots
+With a Gemini API key, a strategist calls Gemini every ~6 seconds and plans for every bot at once: who to
+focus, play style, which fusion to set up, and an in-character taunt that reacts to the fight (shown as a
+speech bubble and in the Arena Feed). Bots' split-second reactions (shielding, cleansing) stay local.
+Without a key, bots use built-in tactics and everything still works.
+
+The game picks the newest `gemini-X.Y-flash-lite` model your key can use (about 1 second per reply; full
+Flash models were 7s+, too slow for live play). Pin one with `GEMINI_MODEL` if you like.
+
+Give the **host's** game your key in one of two ways (never put it in the project folder or git):
+```
+set GEMINI_API_KEY=your-key-here        (Anaconda Prompt, before python main.py / server.py)
+```
+or save it as the only line of `%USERPROFILE%\.wander\gemini_key.txt`.
+
 ## How to cast
 | Spell | Form | Incantation | Effect |
 |---|---|---|---|
@@ -43,8 +73,13 @@ python main.py --fullscreen    # or press F11 in-game
 - No camera? Draw with the mouse. Keys `1-7` cast directly (`Shift` = empowered). `B` toggles the spellbook.
 
 ## Under the hood
-- **Hand tracking** (`wander/hands.py`): OpenCV capture + MediaPipe HandLandmarker on a background thread,
-  pose classification (point/open/fist/pinch), One Euro filtering for a steady wand tip.
+- **Hand tracking** (`wander/hands.py`): MediaPipe HandLandmarker on 720p MJPG capture (a separate grab
+  thread so detection always sees the newest frame), CLAHE contrast boost in dim rooms, two-hand detection
+  that locks onto your casting hand, finger poses from 3D joint angles (robust to tilted hands), pinch
+  measured in centimeters, majority-vote debouncing, and ~0.2s dropout coasting so a missed frame doesn't
+  break your stroke. One Euro filtering keeps the wand tip steady. The preview shows tracking fps.
+- **Arena** (`wander/arena.py`, `server.py`, `net.py`, `arena_client.py`, `gemini.py`): server-authoritative
+  rules over WebSockets, bot tactics, and the Gemini strategist.
 - **Gesture recognition** (`wander/recognizer.py`): $1-style template matcher in numpy (uniform scaling,
   ±25° rotation search) plus geometric heuristics (straightness, signed turning, radial variance).
 - **Spell Forge**: train your own gesture from 3–5 samples, name it, give it an incantation and an effect.
